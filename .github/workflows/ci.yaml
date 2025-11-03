@@ -1,0 +1,104 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'adservice/**'
+      - 'cartservice/**'
+      - 'checkoutservice/**'
+      - 'currencyservice/**'
+      - 'emailservice/**'
+      - 'frontend/**'
+      - 'infra/**'
+      - 'loadgenerator/**'
+      - 'paymentservice/**'
+      - 'productcatalogueservice/**'
+      - 'recommendationservice/**'
+      - 'shippingservice/**'
+  workflow_dispatch:
+
+jobs:
+  build-and-update:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: 
+        service: [adservice, cartservice, checkoutservice, currencyservice, emailservice, frontend, infra, loadgenerator, paymentservice, productcatalogueservice, recommendationservice, shippingservice]
+
+    env: 
+      HELM_REPO:  https://github.com/Olasunkanmi-O/e-commerce-helm.git 
+      DEPLOYMENT_FILE: helm/${{ matrix.service }}/deployment.yaml
+      IMAGE_TAG: ${{ github.sha }}
+      IMAGE_NAME: olasunkanmi12/${{ matrix.service }}
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Check if this directory changed
+        id: changes
+        uses: tj-actions/changed-files@v45
+        with:
+          files: ${{ matrix.service }}/**
+
+      - name: Skip unchanged service
+        if: steps.changes.outputs.any_changed != 'true'
+        run: echo "No changes detected for ${{ matrix.service }}. Skipping build."
+
+      - name: Set up QEMU
+        if: steps.changes.outputs.any_changed == 'true'
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        if: steps.changes.outputs.any_changed == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        if: steps.changes.outputs.any_changed == 'true'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Skip if Dockerfile does not exist
+        if: steps.changes.outputs.any_changed == 'true'
+        run: |
+          if [ ! -f ./${{ matrix.service }}/Dockerfile ]; then
+            echo "No Dockerfile for ${{ matrix.service }}, skipping build."
+            exit 0
+          fi
+
+      - name: Build and push Docker image
+        if: steps.changes.outputs.any_changed == 'true'
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ./${{ matrix.service }}
+          push: true
+          tags: |
+            olasunkanmi12/${{ matrix.service }}:${{ github.sha }}
+            olasunkanmi12/${{ matrix.service }}:${{ github.ref_name }}
+
+      - name: Checkout Helm repo
+        if: steps.changes.outputs.any_changed == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.HELM_REPO }}
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          path: helm
+
+      - name: Update Docker image in Deployment.yaml
+        if: steps.changes.outputs.any_changed == 'true'
+        run: | 
+          sed -i "s|image: .*|image: ${IMAGE_NAME}:${IMAGE_TAG}|" $DEPLOYMENT_FILE
+
+      - name: Commit and push changes to Helm repo
+        if: steps.changes.outputs.any_changed == 'true'
+        run: |
+          cd helm
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add .
+          git diff --quiet || git commit -m "Update image tag for ${{ matrix.service }} to ${{ github.sha }}"
+          git push

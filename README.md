@@ -7,12 +7,13 @@ This repository contains a **cloud‑native microservices e‑commerce applicati
 ## Architecture Overview
 
 ![](ecommerce-updated.png)
+_This diagram represents the high-level system architecture, focusing on ingress traffic flow, GitOps-based CI/CD, and cluster layout._
 
 * **Microservices**: 13 loosely coupled services (frontend, cartservice, checkoutservice, paymentservice, etc.)
 * **Containerization**: Docker
 * **Orchestration**: Kubernetes
 * **Ingress**: NGINX Ingress Controller with TLS (cert‑manager + Let’s Encrypt)
-* **CI/CD**: GitHub Actions
+* **CI/CD**: GitHub Actions + Argo CD (GitOps)
 * **Deployment Strategy**: Helm charts stored in a separate Git repository (GitOps style)
 * **Image Registry**: Docker Hub
 
@@ -28,7 +29,6 @@ The platform consists of the following services:
 * currencyservice
 * emailservice
 * frontend
-* infra
 * loadgenerator
 * paymentservice
 * productcatalogueservice
@@ -162,9 +162,8 @@ spec:
 
 ---
 
-## CI/CD Pipeline 
+## CI/CD Pipeline (Gitops)
 
-### CI/CD Pipeline (GitOps)
 
 This project follows a GitOps-based CI/CD workflow, with a clear separation between Continuous Integration (CI) and Continuous Deployment (CD).
 
@@ -219,6 +218,7 @@ spec:
       prune: true
       selfHeal: true
 ```
+_Argo CD does not monitor container registries directly. Git remains the single source of truth for deployments._
 
 CD flow:
 
@@ -234,7 +234,8 @@ CD flow:
 
 * Domain: `www.alasoasiko.co.uk`
 * TLS: Let’s Encrypt (cert‑manager)
-* Automatic certificate issuance and renewal
+* Automatic certificate issuance and renewal<br>
+_TLS termination is handled at the NGINX Ingress layer using cert-manager._
 
 ---
 
